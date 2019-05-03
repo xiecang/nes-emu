@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from typing import (
-    Dict, List, Tuple
+    Dict, List, Tuple, Optional
 )
 
 import opcodes_table
@@ -19,8 +19,8 @@ class NesCPU(object):
     def _setup(self):
         # at power-up
         self._reg_values: Dict[str, int] = {
-            'PC': 0x34,
-            'P': 0,
+            'PC': 0,
+            'P': 0x34,
             'A': 0,
             'X': 0,
             'Y': 0,
@@ -71,7 +71,12 @@ class NesCPU(object):
         return v
 
     def address(self, mode: str):
-        if mode == 'ABS':
+        if mode == 'IMM':
+            return None
+        elif mode == 'IMP':
+            a = self.next_mem_value()
+            return a
+        elif mode == 'ABS':
             al = self.next_mem_value()
             ah = self.next_mem_value()
             a = utils.number_from_bytes([al, ah])
@@ -136,11 +141,26 @@ class NesCPU(object):
         else:
             raise ValueError('错误的寻址模式：<{}>'.format(mode))
 
-    def _execute(self):
+    def execute(self):
+        args = self._prepare()
+        self._execute(*args)
+
+    def _prepare(self):
         c = self.next_mem_value()
         op, mode = self._opcodes[c]
+        addr = self.address(mode)
+        return op, addr, mode == 'IMP'
+
+    def _execute(self, op: str, addr: Optional[int], immediate: bool):
+        if immediate or addr is None:
+            # 立即寻址 和 隐含寻址 情况
+            mvalue = addr
+        else:
+            mvalue = self.mem_value(addr)
+
+        utils.log(f'mvalue: {mvalue}')
 
         if op == 'JMP':
-            pass
+            self.set_reg_value('pc', addr)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))

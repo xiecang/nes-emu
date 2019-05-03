@@ -2,6 +2,7 @@
 
 import nes_cpu as nc
 import test_nes_file as nft
+import log_differ as ld
 
 
 def test_register():
@@ -42,5 +43,41 @@ def test_load_nes():
     assert expected == result, result
 
 
+def address_for_log_info(addr):
+    if addr is None:
+        return 0
+    else:
+        return addr
+
+
+def test_by_log_differ():
+    differ = ld.LogDiffer.from_json('misc/nestest_log.json')
+    nes = nft.prepare_nes()
+    cpu = nc.NesCPU()
+    cpu.load_nes(nes)
+    # nestest.nes 所需的特殊初始化
+    cpu.set_reg_value('pc', 0xc000)
+    cpu.set_reg_value('p', 0x24)
+
+    while True:
+        info = dict(
+            PC=cpu.reg_value('PC'),
+            A=cpu.reg_value('A'),
+            X=cpu.reg_value('X'),
+            Y=cpu.reg_value('Y'),
+            P=cpu.reg_value('P'),
+            S=cpu.reg_value('S'),
+        )
+
+        op, addr, imm = cpu._prepare()
+
+        info['op'] = op
+        info['address'] = address_for_log_info(addr)
+
+        differ.diff(info)
+
+        cpu._execute(op, addr, imm)
+
+
 if __name__ == '__main__':
-    test_load_nes()
+    test_by_log_differ()
