@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import nes_cpu as nc
+import test_nes_file as nft
 
 
 def test_register():
@@ -25,3 +26,21 @@ def test_register():
         expected = value
 
         assert expected == result, (case, result)
+
+
+def test_load_nes():
+    nes = nft.prepare_nes()
+    cpu = nc.NesCPU()
+    cpu.load_nes(nes)
+
+    expected = nes.prg_rom
+    result = cpu._memory[0x8000:0xc000]
+    assert expected == result, result
+
+    expected = nes.prg_rom
+    result = cpu._memory[0xc000:]
+    assert expected == result, result
+
+
+if __name__ == '__main__':
+    test_load_nes()

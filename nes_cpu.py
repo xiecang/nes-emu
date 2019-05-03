@@ -5,6 +5,7 @@ from typing import (
 
 import opcodes_table
 import utils
+import nes_file as nf
 
 
 class NesCPU(object):
@@ -28,6 +29,10 @@ class NesCPU(object):
         self._memory: List[int] = [0] * 64 * 1024
 
         self._opcodes: Dict[int, Tuple[str, str]] = opcodes_table.opcodes
+
+    def load_nes(self, nes: nf.NesFile):
+        self._memory[0x8000:0xc000] = nes.prg_rom
+        self._memory[0xc000:] = nes.prg_rom
 
     def reg_value(self, name: str):
         n = name.upper()
@@ -130,3 +135,12 @@ class NesCPU(object):
             return pc + diff
         else:
             raise ValueError('错误的寻址模式：<{}>'.format(mode))
+
+    def _execute(self):
+        c = self.next_mem_value()
+        op, mode = self._opcodes[c]
+
+        if op == 'JMP':
+            pass
+        else:
+            raise ValueError('错误的 op： <{}>'.format(op))
