@@ -34,6 +34,7 @@ class NesCPU(object):
         self._p_masks: Dict[str, int] = {
             'N': 0b10000000,
             'V': 0b01000000,
+            'B': 0b00010000,
             'D': 0b00001000,
             'I': 0b00000100,
             'Z': 0b00000010,
@@ -204,18 +205,87 @@ class NesCPU(object):
         elif op == 'LDX':
             v = mvalue
             self.set_reg_value('x', v)
+            self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
-            self.set_flag('n', v & 0b01000000 != 0)
         elif op == 'STX':
             v = self.reg_value('x')
             self.set_mem_value(addr, v)
         elif op == 'JSR':
             pc = self.reg_value('pc')
             self.push(pc & 0x00ff)
-            self.push(pc & 0xff00 >> 8)
+            self.push((pc & 0xff00) >> 8)
             self.set_reg_value('pc', addr)
         elif op == 'NOP':
             # do nothing
             pass
+        elif op == 'SEC':
+            self.set_flag('c', True)
+        elif op == 'BCS':
+            f = self.flag('c')
+            if f:
+                self.set_reg_value('pc', addr)
+        elif op == 'CLC':
+            self.set_flag('c', False)
+        elif op == 'BCC':
+            f = self.flag('c')
+            if not f:
+                self.set_reg_value('pc', addr)
+        elif op == 'LDA':
+            v = addr
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'BEQ':
+            f = self.flag('z')
+            if f:
+                self.set_reg_value('pc', addr)
+        elif op == 'BNE':
+            f = self.flag('z')
+            if not f:
+                self.set_reg_value('pc', addr)
+        elif op == 'STA':
+            v = self.reg_value('a')
+            self.set_mem_value(addr, v)
+        elif op == 'BIT':
+            v = mvalue
+            a = self.reg_value('a')
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('v', v & 0b01000000 != 0)
+            self.set_flag('z', v & a == 0)
+        elif op == 'BVS':
+            f = self.flag('v')
+            if f:
+                self.set_reg_value('pc', addr)
+        elif op == 'BVC':
+            f = self.flag('v')
+            if not f:
+                self.set_reg_value('pc', addr)
+        elif op == 'BPL':
+            f = self.flag('n')
+            if not f:
+                self.set_reg_value('pc', addr)
+        elif op == 'RTS':
+            vh = self.pop()
+            vl = self.pop()
+            v = utils.number_from_bytes([vl, vh])
+            self.set_reg_value('pc', v)
+        elif op == 'SEI':
+            self.set_flag('i', True)
+        elif op == 'SED':
+            self.set_flag('d', True)
+        elif op == 'PHP':
+            # 在这条指令中，只有「被压入栈」的 P 的 B flag 被置为 True
+            bv = self.reg_value('p')
+
+            self.set_flag('b', True)
+            v = self.reg_value('p')
+            self.push(v)
+
+            self.set_reg_value('p', bv)
+        elif op == 'PLA':
+            v = self.pop()
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))
