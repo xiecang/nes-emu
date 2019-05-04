@@ -18,14 +18,21 @@ def main():
     cpu = nc.NesCPU()
     cpu.load_nes(nes)
 
-    rl = cpu.mem_value(0xfffc)
-    rh = cpu.mem_value(0xfffd)
-    reset = utils.number_from_bytes([rl, rh])
-    cpu.set_reg_value('pc', reset)
-    for _ in range(20000):
-        cpu.execute()
+    cpu.interrupt('reset')
+    # for _ in range(20000):
+    #     cpu.execute()
+
+    draw_counter = 0
 
     while running:
+        cpu.execute()
+
+        if draw_counter < 10000:
+            draw_counter += 1
+            continue
+        draw_counter = 0
+
+        cpu.interrupt('nmi')
         cpu.draw(screen)
         # for idx, code in enumerate(memory):
         #     x = idx % 10

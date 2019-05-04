@@ -192,10 +192,23 @@ class NesPPU(object):
         return self.colors[index_of_color]
 
     def draw(self, canvas: pygame.Surface):
-        width, height = canvas.get_width(), canvas.get_height()
+        width, height = canvas.get_size()
 
         for y in range(height):
             for x in range(width):
                 pos = x, y
                 color = self.color_from_xy(x, y)
                 canvas.set_at(pos, color)
+
+    def can_nmi(self):
+        v = self.reg_value('ppuctrl')
+        mask = 0b10000000
+        return (v & mask) != 0
+
+    def set_can_nmi(self, value: bool):
+        v = self.reg_value('ppuctrl')
+        mask = 0b10000000
+        if value:
+            v |= mask
+        else:
+            v &= (~mask)

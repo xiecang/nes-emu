@@ -650,3 +650,35 @@ class NesCPU(object):
             self.set_flag('b', True)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))
+
+    def interrupt(self, name: str):
+        name = name.upper()
+
+        if name == 'NMI':
+            if not self.ppu.can_nmi():
+                return
+            else:
+                self.ppu.set_can_nmi(False)
+            al_pos = 0xfffa
+        elif name == 'RESET':
+            al_pos = 0xfffc
+            # TODO: 完成 reset 的其他处理
+        else:
+            raise ValueError('错误的 interrupt： <{}>'.format(name))
+
+        # 将 pc 和 p 压栈
+        pc = self.reg_value('pc')
+        v = pc
+        self.push((v & 0xff00) >> 8)
+        self.push(v & 0x00ff)
+        # 只有「被压入栈」的 P 的 B flag 被置为 True
+        bv = self.reg_value('p')
+        self.set_flag('b', True)
+        v = self.reg_value('p')
+        self.push(v)
+        self.set_reg_value('p', bv)
+
+        al = self.mem_value(al_pos)
+        ah = self.mem_value(al_pos + 1)
+        addr = utils.number_from_bytes([al, ah])
+        self.set_reg_value('pc', addr)
