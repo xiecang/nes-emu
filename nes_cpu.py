@@ -100,21 +100,21 @@ class NesCPU(object):
             ah = self.next_mem_value()
             a = utils.number_from_bytes([al, ah])
             i = self.reg_value('x')
-            return a + i
+            return (a + i) % 0x10000
         elif mode == 'ABY':
             al = self.next_mem_value()
             ah = self.next_mem_value()
             a = utils.number_from_bytes([al, ah])
             i = self.reg_value('y')
-            return a + i
+            return (a + i) % 0x10000
         elif mode == 'ZPX':
             a = self.next_mem_value()
             i = self.reg_value('x')
-            return (a + i) % 256
+            return (a + i) % 0x100
         elif mode == 'ZPY':
             a = self.next_mem_value()
             i = self.reg_value('y')
-            return (a + i) % 256
+            return (a + i) % 0x100
         elif mode == 'IND':
             tal = self.next_mem_value()
             tah = self.next_mem_value()
@@ -130,8 +130,8 @@ class NesCPU(object):
         elif mode == 'INX':
             t = self.next_mem_value()
             i = self.reg_value('x')
-            ta = (t + i) % 256
-            ta2 = (ta + 1) % 256
+            ta = (t + i) % 0x100
+            ta2 = (ta + 1) % 0x100
 
             al = self.mem_value(ta)
             ah = self.mem_value(ta2)
@@ -140,19 +140,19 @@ class NesCPU(object):
             return a
         elif mode == 'INY':
             ta = self.next_mem_value()
-            ta2 = (ta + 1) % 256
+            ta2 = (ta + 1) % 0x100
 
             al = self.mem_value(ta)
             ah = self.mem_value(ta2)
             a = utils.number_from_bytes([al, ah])
 
             i = self.reg_value('y')
-            return a + i
+            return (a + i) % 0x10000
         elif mode == 'REL':
             diff = self.next_mem_value()
             diff = utils.number_from_bytes([diff], signed=True)
             pc = self.reg_value('pc')
-            return pc + diff
+            return (pc + diff) % 0x10000
         else:
             raise ValueError('错误的寻址模式：<{}>'.format(mode))
 
@@ -473,5 +473,82 @@ class NesCPU(object):
             # 这里不需要像 RTS 一样 +1
             pc = v
             self.set_reg_value('pc', pc)
+        elif op == 'LSR':
+            if addr is not None:
+                old_v = mvalue
+                v = old_v >> 1
+                self.set_mem_value(addr, v)
+            else:
+                old_v = self.reg_value('a')
+                v = old_v >> 1
+                self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            self.set_flag('c', old_v & 0b00000001 != 0)
+        elif op == 'ASL':
+            if addr is not None:
+                old_v = mvalue
+                v = old_v << 1
+                v %= 256
+                self.set_mem_value(addr, v)
+            else:
+                old_v = self.reg_value('a')
+                v = old_v << 1
+                v %= 256
+                self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            self.set_flag('c', old_v & 0b10000000 != 0)
+        elif op == 'ROR':
+            if self.flag('c'):
+                c = 1
+            else:
+                c = 0
+            if addr is not None:
+                old_v = mvalue
+                v = (old_v >> 1) + (c * 128)
+                self.set_mem_value(addr, v)
+            else:
+                old_v = self.reg_value('a')
+                v = (old_v >> 1) + (c * 128)
+                self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            self.set_flag('c', old_v & 0b00000001 != 0)
+        elif op == 'ROL':
+            if self.flag('c'):
+                c = 1
+            else:
+                c = 0
+            if addr is not None:
+                old_v = mvalue
+                v = (old_v << 1) + c
+                v %= 256
+                self.set_mem_value(addr, v)
+            else:
+                old_v = self.reg_value('a')
+                v = (old_v << 1) + c
+                v %= 256
+                self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            self.set_flag('c', old_v & 0b10000000 != 0)
+        elif op == 'STY':
+            v = self.reg_value('y')
+            self.set_mem_value(addr, v)
+        elif op == 'INC':
+            v = mvalue
+            v += 1
+            v %= 256
+            self.set_mem_value(addr, v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'DEC':
+            v = mvalue
+            v -= 1
+            v %= 256
+            self.set_mem_value(addr, v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))
