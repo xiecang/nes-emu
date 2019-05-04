@@ -115,7 +115,7 @@ def test_flag2():
         assert expected == result, (case, result)
 
 
-def test_toggle1():
+def test_set_flag():
     cpu = nc.NesCPU()
     cpu.set_reg_value('p', 0)
 
@@ -127,6 +127,25 @@ def test_toggle1():
     cpu.set_flag('N', False)
     expected = False
     result = cpu.flag('N')
+    assert expected == result, result
+
+
+def test_push_pop1():
+    cpu = nc.NesCPU()
+    cpu.push(1)
+    expected = 1
+    result = cpu.pop()
+    assert expected == result, result
+
+
+def test_push_pop2():
+    cpu = nc.NesCPU()
+    cpu.push(1)
+    cpu.push(2)
+    cpu.push(3)
+    cpu.push(4)
+    expected = [4, 3, 2, 1]
+    result = [cpu.pop() for _ in range(4)]
     assert expected == result, result
 
 

@@ -168,6 +168,18 @@ class NesCPU(object):
             p &= ~m
         self.set_reg_value('p', p)
 
+    def push(self, value: int):
+        s = self.reg_value('s')
+        self.set_mem_value(s, value)
+        self.set_reg_value('s', s - 1)
+
+    def pop(self):
+        s = self.reg_value('s')
+        s += 1
+        v = self.mem_value(s)
+        self.set_reg_value('s', s)
+        return v
+
     def execute(self):
         args = self._prepare()
         self._execute(*args)
@@ -195,6 +207,9 @@ class NesCPU(object):
             self.set_flag('z', v == 0)
             self.set_flag('n', v & 0b01000000 != 0)
         elif op == 'STX':
+            v = self.reg_value('x')
+            self.set_mem_value(addr, v)
+        elif op == 'JSR':
             v = self.reg_value('x')
             self.set_mem_value(addr, v)
         else:
