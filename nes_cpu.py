@@ -550,5 +550,36 @@ class NesCPU(object):
             self.set_mem_value(addr, v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
+        elif op == 'LAX':
+            v = mvalue
+            self.set_reg_value('a', v)
+            self.set_reg_value('x', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'SAX':
+            v1 = self.reg_value('a')
+            v2 = self.reg_value('x')
+            v = v1 & v2
+            self.set_mem_value(addr, v)
+        elif op == 'DCP':
+            self._execute('DEC', addr, immediate)
+            self._execute('CMP', addr, immediate)
+        elif op == 'ISB':
+            self._execute('ISC', addr, immediate)
+        elif op == 'ISC':
+            self._execute('INC', addr, immediate)
+            self._execute('SBC', addr, immediate)
+        elif op == 'SLO':
+            self._execute('ASL', addr, immediate)
+            self._execute('ORA', addr, immediate)
+        elif op == 'RLA':
+            self._execute('ROL', addr, immediate)
+            self._execute('AND', addr, immediate)
+        elif op == 'SRE':
+            self._execute('LSR', addr, immediate)
+            self._execute('EOR', addr, immediate)
+        elif op == 'RRA':
+            self._execute('ROR', addr, immediate)
+            self._execute('ADC', addr, immediate)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))

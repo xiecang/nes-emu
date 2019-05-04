@@ -74,7 +74,10 @@ def test_by_log_differ():
         info['op'] = op
         info['address'] = address_for_log_info(addr)
 
-        differ.diff(info)
+        try:
+            differ.diff(info)
+        except ld.AllTestsPassed:
+            break
 
         cpu._execute(op, addr, imm)
 
