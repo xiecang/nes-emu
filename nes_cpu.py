@@ -119,9 +119,11 @@ class NesCPU(object):
             tal = self.next_mem_value()
             tah = self.next_mem_value()
             ta = utils.number_from_bytes([tal, tah])
+            # 模拟 6502 的 BUG
+            ta2 = (ta & 0xFF00) | ((ta + 1) & 0x00FF)
 
             al = self.mem_value(ta)
-            ah = self.mem_value(ta + 1)
+            ah = self.mem_value(ta2)
             a = utils.number_from_bytes([al, ah])
 
             return a
@@ -171,13 +173,15 @@ class NesCPU(object):
 
     def push(self, value: int):
         s = self.reg_value('s')
-        self.set_mem_value(s, value)
+        addr = s + 0x0100
+        self.set_mem_value(addr, value)
         self.set_reg_value('s', s - 1)
 
     def pop(self):
         s = self.reg_value('s')
         s += 1
-        v = self.mem_value(s)
+        addr = s + 0x0100
+        v = self.mem_value(addr)
         self.set_reg_value('s', s)
         return v
 
@@ -231,7 +235,7 @@ class NesCPU(object):
             if not f:
                 self.set_reg_value('pc', addr)
         elif op == 'LDA':
-            v = addr
+            v = mvalue
             self.set_reg_value('a', v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
@@ -287,5 +291,170 @@ class NesCPU(object):
             self.set_reg_value('a', v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
+        elif op == 'AND':
+            v = mvalue
+            r = self.reg_value('a')
+            v = r & v
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'CMP':
+            v = mvalue
+            r = self.reg_value('a')
+            v = r - v
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            self.set_flag('c', v >= 0)
+        elif op == 'CLD':
+            self.set_flag('d', False)
+        elif op == 'PHA':
+            v = self.reg_value('a')
+            self.push(v)
+        elif op == 'PLP':
+            v = self.pop()
+            # 从栈里弹出的值，外面不会作用到 P 的 B flag 上
+            for b in 'NVDIZC':
+                m = self._p_masks[b]
+                f = v & m != 0
+                self.set_flag(b, f)
+        elif op == 'BMI':
+            f = self.flag('n')
+            if f:
+                self.set_reg_value('pc', addr)
+        elif op == 'ORA':
+            v = mvalue
+            r = self.reg_value('a')
+            v = r | v
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'CLV':
+            self.set_flag('v', False)
+        elif op == 'EOR':
+            v = mvalue
+            r = self.reg_value('a')
+            v = r ^ v
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'ADC':
+            v = mvalue
+            r = self.reg_value('a')
+            if self.flag('c'):
+                c = 1
+            else:
+                c = 0
+            v = r + v + c
+            # C flag: set if overflow
+            if v > 255:
+                v -= 256
+                self.set_flag('c', True)
+            else:
+                self.set_flag('c', False)
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            # 处理 v flag
+            v = utils.number_from_bytes([mvalue], signed=True)
+            r = utils.number_from_bytes([r], signed=True)
+            v = r + v + c
+            self.set_flag('v', v > 128 or v < -127)
+        elif op == 'LDY':
+            v = mvalue
+            self.set_reg_value('y', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'CPY':
+            v = mvalue
+            r = self.reg_value('y')
+            v = r - v
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            self.set_flag('c', v >= 0)
+        elif op == 'CPX':
+            v = mvalue
+            r = self.reg_value('x')
+            v = r - v
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            self.set_flag('c', v >= 0)
+        elif op == 'SBC':
+            v = mvalue
+            r = self.reg_value('a')
+            if self.flag('c'):
+                c = 1
+            else:
+                c = 0
+            v = r - v - (1 - c)
+            # C flag: clear if overflow
+            if v < 0:
+                v += 256
+                self.set_flag('c', False)
+            else:
+                self.set_flag('c', True)
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+            # 处理 v flag
+            v = utils.number_from_bytes([mvalue], signed=True)
+            r = utils.number_from_bytes([r], signed=True)
+            v = r - v - (1 - c)
+            self.set_flag('v', v > 128 or v < -127)
+        elif op == 'INY':
+            v = self.reg_value('y')
+            v += 1
+            v %= 256
+            self.set_reg_value('y', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'INX':
+            v = self.reg_value('x')
+            v += 1
+            v %= 256
+            self.set_reg_value('x', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'DEY':
+            v = self.reg_value('y')
+            v -= 1
+            v %= 256
+            self.set_reg_value('y', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'DEX':
+            v = self.reg_value('x')
+            v -= 1
+            v %= 256
+            self.set_reg_value('x', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'TAY':
+            v = self.reg_value('a')
+            self.set_reg_value('y', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'TAX':
+            v = self.reg_value('a')
+            self.set_reg_value('x', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'TYA':
+            v = self.reg_value('y')
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'TXA':
+            v = self.reg_value('x')
+            self.set_reg_value('a', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'TSX':
+            v = self.reg_value('s')
+            self.set_reg_value('x', v)
+            self.set_flag('n', v & 0b10000000 != 0)
+            self.set_flag('z', v == 0)
+        elif op == 'TXS':
+            v = self.reg_value('x')
+            self.set_reg_value('s', v)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))

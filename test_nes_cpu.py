@@ -149,5 +149,18 @@ def test_push_pop2():
     assert expected == result, result
 
 
+def test_push():
+    """ addr = s + 0x0100 """
+    cpu = nc.NesCPU()
+    cpu.set_reg_value('s', 16)
+    s = cpu.reg_value('s')
+    cpu.push(1)
+
+    expected = 1
+    addr = s + 0x0100
+    result = cpu.mem_value(addr)
+    assert expected == result, result
+
+
 if __name__ == '__main__':
     test_by_log_differ()
