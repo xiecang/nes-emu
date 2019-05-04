@@ -460,5 +460,18 @@ class NesCPU(object):
         elif op == 'TXS':
             v = self.reg_value('x')
             self.set_reg_value('s', v)
+        elif op == 'RTI':
+            v = self.pop()
+            # 从栈里弹出的值，外面不会作用到 P 的 B flag 上
+            for b in 'NVDIZC':
+                m = self._p_masks[b]
+                f = v & m != 0
+                self.set_flag(b, f)
+            vl = self.pop()
+            vh = self.pop()
+            v = utils.number_from_bytes([vl, vh])
+            # 这里不需要像 RTS 一样 +1
+            pc = v
+            self.set_reg_value('pc', pc)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))
