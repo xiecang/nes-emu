@@ -3,23 +3,28 @@ from typing import (
     Dict, List, Tuple, Optional
 )
 
+import config
 import opcodes_table
-import utils
+from utils import log, number_from_bytes
 import nes_file as nf
+from log_differ import LogDiffer
+from nes_ppu import NesPPU
 
 
 class NesCPU(object):
     def __init__(self):
-        self._reg_values = None
-        self._memory = None
-        self._opcodes = None
-        self._p_masks = None
+        self.registers: Dict[str, int] = None
+        self.ram: List[int] = None
+        self.prg_rom: List[int] = None
+        self.opcodes: Dict[int, Tuple[str, str]] = None
+        self.p_masks: Dict[str, int] = None
+        self.ppu = NesPPU()
 
-        self._setup()
+        self.setup()
 
-    def _setup(self):
+    def setup(self):
         # at power-up
-        self._reg_values: Dict[str, int] = {
+        self.registers: Dict[str, int] = {
             'PC': 0,
             'P': 0x34,
             'A': 0,
@@ -27,11 +32,11 @@ class NesCPU(object):
             'Y': 0,
             'S': 0xfd,
         }
-        self._memory: List[int] = [0] * 64 * 1024
+        self.ram = [0] * 64 * 1024
 
-        self._opcodes: Dict[int, Tuple[str, str]] = opcodes_table.opcodes
+        self.opcodes = opcodes_table.opcodes
 
-        self._p_masks: Dict[str, int] = {
+        self.p_masks = {
             'N': 0b10000000,
             'V': 0b01000000,
             'B': 0b00010000,
@@ -42,17 +47,17 @@ class NesCPU(object):
         }
 
     def load_nes(self, nes: nf.NesFile):
-        self._memory[0x8000:0xc000] = nes.prg_rom
-        self._memory[0xc000:] = nes.prg_rom
+        self.ram[0x8000:0xc000] = nes.prg_rom
+        self.ram[0xc000:] = nes.prg_rom
 
     def reg_value(self, name: str):
         n = name.upper()
-        return self._reg_values[n]
+        return self.registers[n]
 
     def set_reg_value(self, name: str, value: int):
         n = name.upper()
 
-        if n not in self._reg_values:
+        if n not in self.registers:
             raise ValueError('未知的寄存器：<{}>'.format(n))
         if n == 'PC':
             if value < 0 or value > 2 ** 16 - 1:
@@ -61,19 +66,55 @@ class NesCPU(object):
             if value < 0 or value > 2 ** 8 - 1:
                 raise ValueError('<{}>超过了<{}>寄存器的取值范围'.format(value, n))
 
-        self._reg_values[n] = value
-
-    def reset(self):
-        s = self.reg_value('s')
-        self.set_reg_value('s', s - 3)
+        self.registers[n] = value
 
     def mem_value(self, addr: int):
-        return self._memory[addr]
+        if 0 <= addr <= 0x1fff:
+            return self.ram[addr]
+        elif 0x2000 <= addr <= 0x2007:
+            return self.ppu.reg_value_for_cpu(addr)
+        elif 0x2008 <= addr <= 0x3fff:
+            # 主动忽略
+            return 0
+        elif 0x4000 <= addr <= 0x4013:
+            # 主动忽略
+            return 0
+        elif addr == 0x4014:
+            return self.ppu.reg_value_for_cpu(addr)
+        elif 0x4015 <= addr <= 0x5fff:
+            # 主动忽略
+            return 0
+        elif 0x8000 <= addr <= 0xbfff:
+            addr -= 0x8000
+            return self.prg_rom[addr]
+        elif 0xc000 <= addr <= 0xffff:
+            addr -= 0xc000
+            return self.prg_rom[addr]
+        else:
+            raise ValueError('错误的读地址：<{}>'.format(addr))
 
     def set_mem_value(self, addr: int, value: int):
+        # log('set_mem_value: ', hex(addr), hex(value))
         if value < 0 or value > 2 ** 8 - 1:
-            raise ValueError(f'<{value}>超过了字节的取值范围')
-        self._memory[addr] = value
+            raise ValueError('<{}>超过了字节的取值范围'.format(value))
+
+        if 0 <= addr <= 0x1fff:
+            self.ram[addr] = value
+        elif 0x2000 <= addr <= 0x2007:
+            self.ppu.set_reg_value_for_cpu(addr, value)
+        elif 0x2008 <= addr <= 0x3fff:
+            # 主动忽略
+            pass
+        elif 0x4000 <= addr <= 0x4013:
+            # 主动忽略
+            pass
+        elif addr == 0x4014:
+            self.ppu.set_reg_value_for_cpu(addr, value)
+        elif 0x4015 <= addr <= 0x5fff:
+            # 主动忽略
+            pass
+        else:
+            raise ValueError('错误的写地址：<{}>'.format(addr))
 
     def next_mem_value(self):
         pc = self.reg_value('pc')
@@ -90,7 +131,7 @@ class NesCPU(object):
         elif mode == 'ABS':
             al = self.next_mem_value()
             ah = self.next_mem_value()
-            a = utils.number_from_bytes([al, ah])
+            a = number_from_bytes([al, ah])
             return a
         elif mode == 'ZPG':
             a = self.next_mem_value()
@@ -98,13 +139,13 @@ class NesCPU(object):
         elif mode == 'ABX':
             al = self.next_mem_value()
             ah = self.next_mem_value()
-            a = utils.number_from_bytes([al, ah])
+            a = number_from_bytes([al, ah])
             i = self.reg_value('x')
             return (a + i) % 0x10000
         elif mode == 'ABY':
             al = self.next_mem_value()
             ah = self.next_mem_value()
-            a = utils.number_from_bytes([al, ah])
+            a = number_from_bytes([al, ah])
             i = self.reg_value('y')
             return (a + i) % 0x10000
         elif mode == 'ZPX':
@@ -118,13 +159,13 @@ class NesCPU(object):
         elif mode == 'IND':
             tal = self.next_mem_value()
             tah = self.next_mem_value()
-            ta = utils.number_from_bytes([tal, tah])
+            ta = number_from_bytes([tal, tah])
             # 模拟 6502 的 BUG
             ta2 = (ta & 0xFF00) | ((ta + 1) & 0x00FF)
 
             al = self.mem_value(ta)
             ah = self.mem_value(ta2)
-            a = utils.number_from_bytes([al, ah])
+            a = number_from_bytes([al, ah])
 
             return a
         elif mode == 'INX':
@@ -135,7 +176,7 @@ class NesCPU(object):
 
             al = self.mem_value(ta)
             ah = self.mem_value(ta2)
-            a = utils.number_from_bytes([al, ah])
+            a = number_from_bytes([al, ah])
 
             return a
         elif mode == 'INY':
@@ -144,13 +185,13 @@ class NesCPU(object):
 
             al = self.mem_value(ta)
             ah = self.mem_value(ta2)
-            a = utils.number_from_bytes([al, ah])
+            a = number_from_bytes([al, ah])
 
             i = self.reg_value('y')
             return (a + i) % 0x10000
         elif mode == 'REL':
             diff = self.next_mem_value()
-            diff = utils.number_from_bytes([diff], signed=True)
+            diff = number_from_bytes([diff], signed=True)
             pc = self.reg_value('pc')
             return (pc + diff) % 0x10000
         else:
@@ -158,7 +199,7 @@ class NesCPU(object):
 
     def flag(self, bit: str):
         b = bit.upper()
-        m = self._p_masks[b]
+        m = self.p_masks[b]
         p = self.reg_value('p')
         f = p & m
         return f != 0
@@ -166,7 +207,7 @@ class NesCPU(object):
     def set_flag(self, bit: str, switch_on: bool):
         b = bit.upper()
         p = self.reg_value('p')
-        m = self._p_masks[b]
+        m = self.p_masks[b]
         if switch_on:
             p |= m
         else:
@@ -188,28 +229,38 @@ class NesCPU(object):
         return v
 
     def execute(self):
-        args = self._prepare()
-        self._execute(*args)
+        # for debug
+        info = {}
+        if config.DEBUG:
+            info.update(self.registers)
+
+        op, addr, mode = self._prepare()
+
+        if config.DEBUG:
+            info['op'] = op
+            info['address'] = addr if addr is not None else -1
+            log(LogDiffer.log_line_from_info(info))
+
+        self._execute(op, addr, mode)
 
     def _prepare(self):
         c = self.next_mem_value()
-        op, mode = self._opcodes[c]
+        op, mode = self.opcodes[c]
         addr = self.address(mode)
-        return op, addr, mode == 'IMM'
+        return op, addr, mode
 
-    def _execute(self, op: str, addr: Optional[int], immediate: bool):
-        if immediate or addr is None:
+    def _value_from_address(self, addr: Optional[int], mode: str):
+        if mode in ('IMM', 'IMP'):
             # 立即寻址 和 隐含寻址 情况
-            mvalue = addr
+            return addr
         else:
-            mvalue = self.mem_value(addr)
+            return self.mem_value(addr)
 
-        utils.log(f'mvalue: {mvalue}')
-
+    def _execute(self, op: str, addr: Optional[int], mode: str):
         if op == 'JMP':
             self.set_reg_value('pc', addr)
         elif op == 'LDX':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             self.set_reg_value('x', v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
@@ -238,7 +289,7 @@ class NesCPU(object):
             if not f:
                 self.set_reg_value('pc', addr)
         elif op == 'LDA':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             self.set_reg_value('a', v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
@@ -254,7 +305,7 @@ class NesCPU(object):
             v = self.reg_value('a')
             self.set_mem_value(addr, v)
         elif op == 'BIT':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             a = self.reg_value('a')
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('v', v & 0b01000000 != 0)
@@ -274,7 +325,7 @@ class NesCPU(object):
         elif op == 'RTS':
             vl = self.pop()
             vh = self.pop()
-            v = utils.number_from_bytes([vl, vh])
+            v = number_from_bytes([vl, vh])
             pc = v + 1
             self.set_reg_value('pc', pc)
         elif op == 'SEI':
@@ -296,14 +347,14 @@ class NesCPU(object):
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
         elif op == 'AND':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             r = self.reg_value('a')
             v = r & v
             self.set_reg_value('a', v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
         elif op == 'CMP':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             r = self.reg_value('a')
             v = r - v
             self.set_flag('n', v & 0b10000000 != 0)
@@ -318,7 +369,7 @@ class NesCPU(object):
             v = self.pop()
             # 从栈里弹出的值，外面不会作用到 P 的 B flag 上
             for b in 'NVDIZC':
-                m = self._p_masks[b]
+                m = self.p_masks[b]
                 f = v & m != 0
                 self.set_flag(b, f)
         elif op == 'BMI':
@@ -326,7 +377,7 @@ class NesCPU(object):
             if f:
                 self.set_reg_value('pc', addr)
         elif op == 'ORA':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             r = self.reg_value('a')
             v = r | v
             self.set_reg_value('a', v)
@@ -335,19 +386,17 @@ class NesCPU(object):
         elif op == 'CLV':
             self.set_flag('v', False)
         elif op == 'EOR':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             r = self.reg_value('a')
             v = r ^ v
             self.set_reg_value('a', v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
         elif op == 'ADC':
+            mvalue = self._value_from_address(addr, mode)
             v = mvalue
             r = self.reg_value('a')
-            if self.flag('c'):
-                c = 1
-            else:
-                c = 0
+            c = int(self.flag('c'))
             v = r + v + c
             # C flag: set if overflow
             if v > 255:
@@ -359,36 +408,34 @@ class NesCPU(object):
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
             # 处理 v flag
-            v = utils.number_from_bytes([mvalue], signed=True)
-            r = utils.number_from_bytes([r], signed=True)
+            v = number_from_bytes([mvalue], signed=True)
+            r = number_from_bytes([r], signed=True)
             v = r + v + c
             self.set_flag('v', v > 128 or v < -127)
         elif op == 'LDY':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             self.set_reg_value('y', v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
         elif op == 'CPY':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             r = self.reg_value('y')
             v = r - v
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
             self.set_flag('c', v >= 0)
         elif op == 'CPX':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             r = self.reg_value('x')
             v = r - v
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
             self.set_flag('c', v >= 0)
         elif op == 'SBC':
+            mvalue = self._value_from_address(addr, mode)
             v = mvalue
             r = self.reg_value('a')
-            if self.flag('c'):
-                c = 1
-            else:
-                c = 0
+            c = int(self.flag('c'))
             v = r - v - (1 - c)
             # C flag: clear if overflow
             if v < 0:
@@ -400,8 +447,8 @@ class NesCPU(object):
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
             # 处理 v flag
-            v = utils.number_from_bytes([mvalue], signed=True)
-            r = utils.number_from_bytes([r], signed=True)
+            v = number_from_bytes([mvalue], signed=True)
+            r = number_from_bytes([r], signed=True)
             v = r - v - (1 - c)
             self.set_flag('v', v > 128 or v < -127)
         elif op == 'INY':
@@ -464,18 +511,18 @@ class NesCPU(object):
             v = self.pop()
             # 从栈里弹出的值，外面不会作用到 P 的 B flag 上
             for b in 'NVDIZC':
-                m = self._p_masks[b]
+                m = self.p_masks[b]
                 f = v & m != 0
                 self.set_flag(b, f)
             vl = self.pop()
             vh = self.pop()
-            v = utils.number_from_bytes([vl, vh])
+            v = number_from_bytes([vl, vh])
             # 这里不需要像 RTS 一样 +1
             pc = v
             self.set_reg_value('pc', pc)
         elif op == 'LSR':
             if addr is not None:
-                old_v = mvalue
+                old_v = self._value_from_address(addr, mode)
                 v = old_v >> 1
                 self.set_mem_value(addr, v)
             else:
@@ -487,7 +534,7 @@ class NesCPU(object):
             self.set_flag('c', old_v & 0b00000001 != 0)
         elif op == 'ASL':
             if addr is not None:
-                old_v = mvalue
+                old_v = self._value_from_address(addr, mode)
                 v = old_v << 1
                 v %= 256
                 self.set_mem_value(addr, v)
@@ -500,12 +547,9 @@ class NesCPU(object):
             self.set_flag('z', v == 0)
             self.set_flag('c', old_v & 0b10000000 != 0)
         elif op == 'ROR':
-            if self.flag('c'):
-                c = 1
-            else:
-                c = 0
+            c = int(self.flag('c'))
             if addr is not None:
-                old_v = mvalue
+                old_v = self._value_from_address(addr, mode)
                 v = (old_v >> 1) + (c * 128)
                 self.set_mem_value(addr, v)
             else:
@@ -516,12 +560,9 @@ class NesCPU(object):
             self.set_flag('z', v == 0)
             self.set_flag('c', old_v & 0b00000001 != 0)
         elif op == 'ROL':
-            if self.flag('c'):
-                c = 1
-            else:
-                c = 0
+            c = int(self.flag('c'))
             if addr is not None:
-                old_v = mvalue
+                old_v = self._value_from_address(addr, mode)
                 v = (old_v << 1) + c
                 v %= 256
                 self.set_mem_value(addr, v)
@@ -537,21 +578,21 @@ class NesCPU(object):
             v = self.reg_value('y')
             self.set_mem_value(addr, v)
         elif op == 'INC':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             v += 1
             v %= 256
             self.set_mem_value(addr, v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
         elif op == 'DEC':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             v -= 1
             v %= 256
             self.set_mem_value(addr, v)
             self.set_flag('n', v & 0b10000000 != 0)
             self.set_flag('z', v == 0)
         elif op == 'LAX':
-            v = mvalue
+            v = self._value_from_address(addr, mode)
             self.set_reg_value('a', v)
             self.set_reg_value('x', v)
             self.set_flag('n', v & 0b10000000 != 0)
@@ -562,24 +603,48 @@ class NesCPU(object):
             v = v1 & v2
             self.set_mem_value(addr, v)
         elif op == 'DCP':
-            self._execute('DEC', addr, immediate)
-            self._execute('CMP', addr, immediate)
+            self._execute('DEC', addr, mode)
+            self._execute('CMP', addr, mode)
         elif op == 'ISB':
-            self._execute('ISC', addr, immediate)
+            self._execute('ISC', addr, mode)
         elif op == 'ISC':
-            self._execute('INC', addr, immediate)
-            self._execute('SBC', addr, immediate)
+            self._execute('INC', addr, mode)
+            self._execute('SBC', addr, mode)
         elif op == 'SLO':
-            self._execute('ASL', addr, immediate)
-            self._execute('ORA', addr, immediate)
+            self._execute('ASL', addr, mode)
+            self._execute('ORA', addr, mode)
         elif op == 'RLA':
-            self._execute('ROL', addr, immediate)
-            self._execute('AND', addr, immediate)
+            self._execute('ROL', addr, mode)
+            self._execute('AND', addr, mode)
         elif op == 'SRE':
-            self._execute('LSR', addr, immediate)
-            self._execute('EOR', addr, immediate)
+            self._execute('LSR', addr, mode)
+            self._execute('EOR', addr, mode)
         elif op == 'RRA':
-            self._execute('ROR', addr, immediate)
-            self._execute('ADC', addr, immediate)
+            self._execute('ROR', addr, mode)
+            self._execute('ADC', addr, mode)
+        elif op == 'BRK':
+            # pc 压栈
+            # 这里不需要 pc - 1
+            pc = self.reg_value('pc')
+            v = pc
+            self.push((v & 0xff00) >> 8)
+            self.push(v & 0x00ff)
+
+            # p 压栈
+            # 在这条指令中，只有「被压入栈」的 P 的 B flag 被置为 True
+            bv = self.reg_value('p')
+            self.set_flag('b', True)
+            v = self.reg_value('p')
+            self.push(v)
+            self.set_reg_value('p', bv)
+
+            # 设置中断跳转
+            vl = self.mem_value(0xfffe)
+            vh = self.mem_value(0xffff)
+            v = number_from_bytes([vl, vh])
+            self.set_reg_value('pc', v)
+
+            self.set_flag('i', True)
+            self.set_flag('b', True)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))

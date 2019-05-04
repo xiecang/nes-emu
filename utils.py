@@ -1,9 +1,16 @@
 # -*- coding: utf-8 -*-
+import time
 from typing import List
 
 
 def log(*args, **kwargs):
-    print(*args, **kwargs)
+    time_format = '%H:%M:%S'
+    value = time.localtime(int(time.time()))
+    dt = time.strftime(time_format, value)
+
+    print(dt, *args, **kwargs)
+    with open('nes.log', 'a', encoding='utf-8') as f:
+        print(dt, *args, file=f, **kwargs)
 
 
 def number_from_bytes(byte_list: List[int], *, signed=False):
