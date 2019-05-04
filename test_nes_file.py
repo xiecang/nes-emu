@@ -2,26 +2,26 @@
 import nes_file as nf
 
 
-def prepare_nes():
+def prepared_nes():
     return nf.NesFile.load('misc/nestest.nes')
 
 
 def test_load1():
-    nes = prepare_nes()
+    nes = prepared_nes()
     excepted = 'NES'
     result = nes.format
     assert excepted == result, result
 
 
 def test_load2():
-    nes = prepare_nes()
+    nes = prepared_nes()
     excepted = 16384 * nes.size_of_prg_rom_unit
     result = len(nes.prg_rom)
     assert excepted == result, result
 
 
 def test_load3():
-    nes = prepare_nes()
+    nes = prepared_nes()
     expected = 8192 * nes.size_of_chr_rom_unit
     result = len(nes.chr_rom)
     assert expected == result, result

@@ -31,7 +31,7 @@ def test_register():
 
 
 def test_load_nes():
-    nes = nft.prepare_nes()
+    nes = nft.prepared_nes()
     cpu = nc.NesCPU()
     cpu.load_nes(nes)
 
@@ -49,7 +49,7 @@ def address_for_log_info(addr):
 
 def test_by_log_differ():
     differ = ld.LogDiffer.from_json('misc/nestest_log.json')
-    nes = nft.prepare_nes()
+    nes = nft.prepared_nes()
     cpu = nc.NesCPU()
     cpu.load_nes(nes)
     # nestest.nes 所需的特殊初始化
@@ -162,7 +162,7 @@ def test_push():
 
 
 def test_ppu():
-    nes = nft.prepare_nes()
+    nes = nft.prepared_nes()
     cpu = nc.NesCPU()
     cpu.load_nes(nes)
 

@@ -3,6 +3,7 @@ from typing import (
     Dict, List, Tuple, Optional
 )
 
+import pygame
 import config
 import opcodes_table
 from utils import log, number_from_bytes
@@ -24,7 +25,7 @@ class NesCPU(object):
 
     def setup(self):
         # at power-up
-        self.registers: Dict[str, int] = {
+        self.registers = {
             'PC': 0,
             'P': 0x34,
             'A': 0,
@@ -32,10 +33,8 @@ class NesCPU(object):
             'Y': 0,
             'S': 0xfd,
         }
-        self.ram = [0] * 64 * 1024
-
+        self.ram = [0] * 0x2000
         self.opcodes = opcodes_table.opcodes
-
         self.p_masks = {
             'N': 0b10000000,
             'V': 0b01000000,
@@ -47,8 +46,8 @@ class NesCPU(object):
         }
 
     def load_nes(self, nes: nf.NesFile):
-        self.ram[0x8000:0xc000] = nes.prg_rom
-        self.ram[0xc000:] = nes.prg_rom
+        self.prg_rom = nes.prg_rom
+        self.ppu.load_nes(nes)
 
     def reg_value(self, name: str):
         n = name.upper()
@@ -227,6 +226,9 @@ class NesCPU(object):
         self.set_reg_value('s', s)
         v = self.mem_value(addr)
         return v
+
+    def draw(self, canvas: pygame.Surface):
+        self.ppu.draw(canvas)
 
     def execute(self):
         # for debug
