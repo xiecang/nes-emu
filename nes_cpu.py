@@ -155,15 +155,17 @@ class NesCPU(object):
         b = bit.upper()
         m = self._p_masks[b]
         p = self.reg_value('p')
-        f = p & m ^ m == 0
-        return f
+        f = p & m
+        return f != 0
 
-    def toggle(self, bits: str):
-        bits = bits.upper()
+    def set_flag(self, bit: str, switch_on: bool):
+        b = bit.upper()
         p = self.reg_value('p')
-        for b in bits:
-            m = self._p_masks[b]
-            p ^= m
+        m = self._p_masks[b]
+        if switch_on:
+            p |= m
+        else:
+            p &= ~m
         self.set_reg_value('p', p)
 
     def execute(self):
@@ -188,7 +190,10 @@ class NesCPU(object):
         if op == 'JMP':
             self.set_reg_value('pc', addr)
         elif op == 'LDX':
-            self.set_reg_value('x', mvalue)
+            v = mvalue
+            self.set_reg_value('x', v)
+            self.set_flag('z', v == 0)
+            self.set_flag('n', v & 0b01000000 != 0)
         elif op == 'STX':
             v = self.reg_value('x')
             self.set_mem_value(addr, v)

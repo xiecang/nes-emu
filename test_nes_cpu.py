@@ -119,72 +119,14 @@ def test_toggle1():
     cpu = nc.NesCPU()
     cpu.set_reg_value('p', 0)
 
-    cpu.toggle('N')
+    cpu.set_flag('N', True)
     expected = True
     result = cpu.flag('N')
-
     assert expected == result, result
 
-
-def test_toggle2():
-    cpu = nc.NesCPU()
-    cpu.set_reg_value('p', 0)
-
-    cpu.toggle('N')
-    cpu.toggle('N')
+    cpu.set_flag('N', False)
     expected = False
     result = cpu.flag('N')
-
-    assert expected == result, result
-
-
-def test_toggle3():
-    cpu = nc.NesCPU()
-    cpu.set_reg_value('p', 0)
-
-    cpu.toggle('N')
-    cpu.toggle('N')
-    cpu.toggle('N')
-    expected = True
-    result = cpu.flag('N')
-    assert expected == result, result
-
-
-def test_toggle4():
-    cpu = nc.NesCPU()
-    cpu.set_reg_value('p', 0)
-
-    cpu.toggle('N')
-    cpu.toggle('N')
-    cpu.toggle('N')
-    cpu.toggle('N')
-    expected = False
-    result = cpu.flag('N')
-
-    assert expected == result, result
-
-
-def test_toggle5():
-    cpu = nc.NesCPU()
-    cpu.set_reg_value('p', 0)
-
-    cpu.toggle('NV')
-    expected = True
-    result = cpu.flag('N')
-    assert expected == result, result
-    expected = True
-    result = cpu.flag('V')
-    assert expected == result, result
-
-    cpu.toggle('NVD')
-    expected = False
-    result = cpu.flag('N')
-    assert expected == result, result
-    expected = False
-    result = cpu.flag('V')
-    assert expected == result, result
-    expected = True
-    result = cpu.flag('D')
     assert expected == result, result
 
 
