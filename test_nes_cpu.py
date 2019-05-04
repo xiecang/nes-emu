@@ -79,5 +79,114 @@ def test_by_log_differ():
         cpu._execute(op, addr, imm)
 
 
+def test_flag1():
+    cpu = nc.NesCPU()
+    cpu.set_reg_value('p', 0)
+    test_cases = [
+        ('N', False),
+        ('V', False),
+        ('D', False),
+        ('I', False),
+        ('Z', False),
+        ('C', False),
+    ]
+    for case in test_cases:
+        b = case[0]
+        expected = case[1]
+        result = cpu.flag(b)
+        assert expected == result, (case, result)
+
+
+def test_flag2():
+    cpu = nc.NesCPU()
+    cpu.set_reg_value('p', 0b10001010)
+    test_cases = [
+        ('N', True),
+        ('V', False),
+        ('D', True),
+        ('I', False),
+        ('Z', True),
+        ('C', False),
+    ]
+    for case in test_cases:
+        b = case[0]
+        expected = case[1]
+        result = cpu.flag(b)
+        assert expected == result, (case, result)
+
+
+def test_toggle1():
+    cpu = nc.NesCPU()
+    cpu.set_reg_value('p', 0)
+
+    cpu.toggle('N')
+    expected = True
+    result = cpu.flag('N')
+
+    assert expected == result, result
+
+
+def test_toggle2():
+    cpu = nc.NesCPU()
+    cpu.set_reg_value('p', 0)
+
+    cpu.toggle('N')
+    cpu.toggle('N')
+    expected = False
+    result = cpu.flag('N')
+
+    assert expected == result, result
+
+
+def test_toggle3():
+    cpu = nc.NesCPU()
+    cpu.set_reg_value('p', 0)
+
+    cpu.toggle('N')
+    cpu.toggle('N')
+    cpu.toggle('N')
+    expected = True
+    result = cpu.flag('N')
+    assert expected == result, result
+
+
+def test_toggle4():
+    cpu = nc.NesCPU()
+    cpu.set_reg_value('p', 0)
+
+    cpu.toggle('N')
+    cpu.toggle('N')
+    cpu.toggle('N')
+    cpu.toggle('N')
+    expected = False
+    result = cpu.flag('N')
+
+    assert expected == result, result
+
+
+def test_toggle5():
+    cpu = nc.NesCPU()
+    cpu.set_reg_value('p', 0)
+
+    cpu.toggle('NV')
+    expected = True
+    result = cpu.flag('N')
+    assert expected == result, result
+    expected = True
+    result = cpu.flag('V')
+    assert expected == result, result
+
+    cpu.toggle('NVD')
+    expected = False
+    result = cpu.flag('N')
+    assert expected == result, result
+    expected = False
+    result = cpu.flag('V')
+    assert expected == result, result
+    expected = True
+    result = cpu.flag('D')
+    assert expected == result, result
+
+
 if __name__ == '__main__':
     test_by_log_differ()

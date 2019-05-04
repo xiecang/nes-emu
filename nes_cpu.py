@@ -13,6 +13,7 @@ class NesCPU(object):
         self._reg_values = None
         self._memory = None
         self._opcodes = None
+        self._p_masks = None
 
         self._setup()
 
@@ -29,6 +30,15 @@ class NesCPU(object):
         self._memory: List[int] = [0] * 64 * 1024
 
         self._opcodes: Dict[int, Tuple[str, str]] = opcodes_table.opcodes
+
+        self._p_masks: Dict[str, int] = {
+            'N': 0b10000000,
+            'V': 0b01000000,
+            'D': 0b00001000,
+            'I': 0b00000100,
+            'Z': 0b00000010,
+            'C': 0b00000001,
+        }
 
     def load_nes(self, nes: nf.NesFile):
         self._memory[0x8000:0xc000] = nes.prg_rom
@@ -71,9 +81,9 @@ class NesCPU(object):
         return v
 
     def address(self, mode: str):
-        if mode == 'IMM':
+        if mode == 'IMP':
             return None
-        elif mode == 'IMP':
+        elif mode == 'IMM':
             a = self.next_mem_value()
             return a
         elif mode == 'ABS':
@@ -141,6 +151,21 @@ class NesCPU(object):
         else:
             raise ValueError('错误的寻址模式：<{}>'.format(mode))
 
+    def flag(self, bit: str):
+        b = bit.upper()
+        m = self._p_masks[b]
+        p = self.reg_value('p')
+        f = p & m ^ m == 0
+        return f
+
+    def toggle(self, bits: str):
+        bits = bits.upper()
+        p = self.reg_value('p')
+        for b in bits:
+            m = self._p_masks[b]
+            p ^= m
+        self.set_reg_value('p', p)
+
     def execute(self):
         args = self._prepare()
         self._execute(*args)
@@ -149,7 +174,7 @@ class NesCPU(object):
         c = self.next_mem_value()
         op, mode = self._opcodes[c]
         addr = self.address(mode)
-        return op, addr, mode == 'IMP'
+        return op, addr, mode == 'IMM'
 
     def _execute(self, op: str, addr: Optional[int], immediate: bool):
         if immediate or addr is None:
@@ -162,5 +187,10 @@ class NesCPU(object):
 
         if op == 'JMP':
             self.set_reg_value('pc', addr)
+        elif op == 'LDX':
+            self.set_reg_value('x', mvalue)
+        elif op == 'STX':
+            v = self.reg_value('x')
+            self.set_mem_value(addr, v)
         else:
             raise ValueError('错误的 op： <{}>'.format(op))
