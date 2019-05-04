@@ -110,11 +110,11 @@ class NesCPU(object):
         elif mode == 'ZPX':
             a = self.next_mem_value()
             i = self.reg_value('x')
-            return a + i
+            return (a + i) % 256
         elif mode == 'ZPY':
             a = self.next_mem_value()
             i = self.reg_value('y')
-            return a + i
+            return (a + i) % 256
         elif mode == 'IND':
             tal = self.next_mem_value()
             tah = self.next_mem_value()
@@ -130,18 +130,20 @@ class NesCPU(object):
         elif mode == 'INX':
             t = self.next_mem_value()
             i = self.reg_value('x')
-            ta = t + i
+            ta = (t + i) % 256
+            ta2 = (ta + 1) % 256
 
             al = self.mem_value(ta)
-            ah = self.mem_value(ta + 1)
+            ah = self.mem_value(ta2)
             a = utils.number_from_bytes([al, ah])
 
             return a
         elif mode == 'INY':
             ta = self.next_mem_value()
+            ta2 = (ta + 1) % 256
 
             al = self.mem_value(ta)
-            ah = self.mem_value(ta + 1)
+            ah = self.mem_value(ta2)
             a = utils.number_from_bytes([al, ah])
 
             i = self.reg_value('y')
@@ -181,8 +183,8 @@ class NesCPU(object):
         s = self.reg_value('s')
         s += 1
         addr = s + 0x0100
-        v = self.mem_value(addr)
         self.set_reg_value('s', s)
+        v = self.mem_value(addr)
         return v
 
     def execute(self):
@@ -216,8 +218,9 @@ class NesCPU(object):
             self.set_mem_value(addr, v)
         elif op == 'JSR':
             pc = self.reg_value('pc')
-            self.push(pc & 0x00ff)
-            self.push((pc & 0xff00) >> 8)
+            v = pc - 1
+            self.push((v & 0xff00) >> 8)
+            self.push(v & 0x00ff)
             self.set_reg_value('pc', addr)
         elif op == 'NOP':
             # do nothing
@@ -269,10 +272,11 @@ class NesCPU(object):
             if not f:
                 self.set_reg_value('pc', addr)
         elif op == 'RTS':
-            vh = self.pop()
             vl = self.pop()
+            vh = self.pop()
             v = utils.number_from_bytes([vl, vh])
-            self.set_reg_value('pc', v)
+            pc = v + 1
+            self.set_reg_value('pc', pc)
         elif op == 'SEI':
             self.set_flag('i', True)
         elif op == 'SED':

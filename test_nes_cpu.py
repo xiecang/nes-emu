@@ -152,7 +152,6 @@ def test_push_pop2():
 def test_push():
     """ addr = s + 0x0100 """
     cpu = nc.NesCPU()
-    cpu.set_reg_value('s', 16)
     s = cpu.reg_value('s')
     cpu.push(1)
 
