@@ -210,7 +210,12 @@ class NesCPU(object):
             v = self.reg_value('x')
             self.set_mem_value(addr, v)
         elif op == 'JSR':
-            v = self.reg_value('x')
-            self.set_mem_value(addr, v)
+            pc = self.reg_value('pc')
+            self.push(pc & 0x00ff)
+            self.push(pc & 0xff00 >> 8)
+            self.set_reg_value('pc', addr)
+        elif op == 'NOP':
+            # do nothing
+            pass
         else:
             raise ValueError('错误的 op： <{}>'.format(op))

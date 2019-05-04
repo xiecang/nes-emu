@@ -45,7 +45,7 @@ def test_load_nes():
 
 def address_for_log_info(addr):
     if addr is None:
-        return 0
+        return -1
     else:
         return addr
 
